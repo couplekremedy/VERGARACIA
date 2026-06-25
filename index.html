@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="theme-color" content="#CC0000"/>
+<title>Vergara y CIA</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.24.7/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#000;color:#fff;font-family:Arial,sans-serif}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:#CC0000}
+input[type=date]::-webkit-calendar-picker-indicator,
+input[type=month]::-webkit-calendar-picker-indicator,
+input[type=time]::-webkit-calendar-picker-indicator{filter:invert(0.4)}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+select option{background:#111;color:#fff}
+.rhov:hover{background:#161616!important}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect}=React;
+const C={black:"#000",surface:"#0A0A0A",card:"#111",cardH:"#161616",border:"#1E1E1E",
+  red:"#CC0000",redB:"#FF1A1A",white:"#fff",g1:"#AAA",g2:"#666",g3:"#333",
+  green:"#00BB44",yellow:"#DDAA00",blue:"#1A6ECC",purple:"#8B5CF6"};
+
+function fCLP(n){return"$ "+Number(n||0).toLocaleString("es-CL")}
+function fDate(d){if(!d)return"-";return new Date(d+"T00:00:00").toLocaleDateString("es-CL")}
+function diffH(a,b){
+  if(!a||!b)return null;
+  const[ah,am]=a.split(":").map(Number);
+  const[bh,bm]=b.split(":").map(Number);
+  const m=(bh*60+bm)-(ah*60+am);
+  if(m<=0)return null;
+  return Math.floor(m/60)+"h "+m%60+"m";
+}
+
+const TIPOS=["Pintura Completa","Pintura Parcial","Masilla","Desabolladura","Pulido","Preparacion","Otro"];
+const CAT_T=["Bencina","Pintura","Masilla","Materiales","Herramientas","Subcontrato","Otro"];
+const CAT_P=["Comida","Transporte","Servicios","Arriendo","Salud","Otro"];
+const KEY="taller_v4";
+
+function load(){
+  try{const d=JSON.parse(localStorage.getItem(KEY)||"{}");
+    return{trabajos:[],gastos:[],tecnicos:[],presupuestos:[],...d};}
+  catch{return{trabajos:[],gastos:[],tecnicos:[],presupuestos:[]};}
+}
+function save(d){
+  try{localStorage.setItem(KEY,JSON.stringify(d));}catch{}
+}
+
+// Icons
+const Ico={
+  car:()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M5 17H3v-5l2-5h14l2 5v5h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>,
+  money:()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/></svg>,
+  team:()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
+  doc:()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+  chart:()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>,
+  plus:()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  edit:()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  trash:()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6m4-6v6"/><path d="M9 6V4h6v2"/></svg>,
+  close:()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="15" height="15"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  wrench:()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>,
+  eye:()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>,
+  print:()=><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>,
+};
+
+// Shared UI
+function Btn({children,onClick,red}){
+  return <button onClick={onClick} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",
+    border:red?"none":"1px solid "+C.border,background:red?C.red:"transparent",
+    color:red?C.white:C.g1,cursor:"pointer",fontFamily:"Arial,sans-serif",fontSize:10,fontWeight:700,letterSpacing:1.5}}>
+    {children}
+  </button>;
+}
+function IBtn({children,color,onClick}){
+  return <button onClick={onClick} style={{background:"transparent",border:"1px solid "+C.border,
+    color,width:26,height:26,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+    {children}
+  </button>;
+}
+function Empty({msg}){
+  return <div style={{textAlign:"center",padding:"50px 20px",color:C.g2,fontSize:11,letterSpacing:2}}>{msg.toUpperCase()}</div>;
+}
+const iSt={background:C.black,border:"1px solid "+C.border,padding:"9px 11px",color:C.white,fontSize:13,width:"100%",fontFamily:"Arial,sans-serif",outline:"none"};
+function FF({label,val,set,type,ph,opts}){
+  type=type||"text";
+  return <div style={{flex:1,minWidth:120}}>
+    <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:4,fontWeight:700}}>{label}</div>
+    {type==="select"
+      ?<select value={val} onChange={e=>set(e.target.value)} style={iSt}>
+         {ph&&<option value="">{ph}</option>}
+         {(opts||[]).map(([v,l])=><option key={v} value={v}>{l}</option>)}
+       </select>
+      :type==="textarea"
+        ?<textarea value={val} onChange={e=>set(e.target.value)} placeholder={ph} rows={3} style={{...iSt,resize:"vertical"}}/>
+        :<input type={type} value={val} onChange={e=>set(e.target.value)} placeholder={ph} style={iSt}/>
+    }
+  </div>;
+}
+function FR({children}){return <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>{children}</div>;}
+function FS({label,children}){
+  return <div>
+    <div style={{fontSize:8,color:C.red,letterSpacing:3,marginBottom:8,fontWeight:700,borderBottom:"1px solid #3A0A0A",paddingBottom:5}}>{label}</div>
+    <div style={{display:"flex",flexDirection:"column",gap:10}}>{children}</div>
+  </div>;
+}
+function Modal({title,children,onClose,onSave,wide,extra}){
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.95)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+    <div style={{background:C.surface,border:"1px solid "+C.border,borderTop:"3px solid "+C.red,width:"100%",maxWidth:wide?720:460,maxHeight:"92vh",display:"flex",flexDirection:"column",animation:"fadein 0.15s ease"}}>
+      <div style={{padding:"14px 20px",borderBottom:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontWeight:700,fontSize:11,letterSpacing:3}}>{title}</span>
+        <button onClick={onClose} style={{background:"none",border:"none",color:C.g2,cursor:"pointer",display:"flex"}}><Ico.close/></button>
+      </div>
+      <div style={{padding:20,overflow:"auto",flex:1,display:"flex",flexDirection:"column",gap:14}}>{children}</div>
+      <div style={{padding:"12px 20px",borderTop:"1px solid "+C.border,display:"flex",justifyContent:"flex-end",gap:8}}>
+        {extra}
+        <button onClick={onClose} style={{padding:"8px 16px",border:"1px solid "+C.border,background:"transparent",color:C.g1,cursor:"pointer",fontFamily:"Arial,sans-serif",fontSize:10,fontWeight:700,letterSpacing:1.5}}>CANCELAR</button>
+        <button onClick={onSave} style={{padding:"8px 20px",border:"none",background:C.red,color:C.white,cursor:"pointer",fontFamily:"Arial,sans-serif",fontSize:10,fontWeight:700,letterSpacing:1.5}}>GUARDAR</button>
+      </div>
+    </div>
+  </div>;
+}
+
+// Modal Trabajo
+function MTrabajo({t,onSave,onClose}){
+  const[f,setF]=useState({patente:"",marca:"",modelo:"",anio:"",codigoColor:"",tipoServicio:"",nroTrabajo:"",estado:"activo",fechaIngreso:new Date().toISOString().split("T")[0],fechaEntrega:"",clienteNombre:"",clienteRut:"",clienteTel:"",totalCobrar:"",abono:"",descripcion:"",...t});
+  const pend=Math.max(0,Number(f.totalCobrar||0)-Number(f.abono||0));
+  function sub(){if(!f.patente&&!f.clienteNombre){alert("Ingresa patente o nombre");return;}onSave({...f,pendiente:pend});}
+  return <Modal title={f.id?"EDITAR ORDEN":"NUEVA ORDEN"} onClose={onClose} onSave={sub} wide>
+    <FS label="VEHICULO">
+      <FR><FF label="PATENTE" val={f.patente} set={v=>setF(p=>({...p,patente:v.toUpperCase()}))} ph="BBCC12"/>
+        <FF label="N ORDEN" val={f.nroTrabajo} set={v=>setF(p=>({...p,nroTrabajo:v}))} ph="T-001"/>
+        <FF label="ESTADO" type="select" val={f.estado} set={v=>setF(p=>({...p,estado:v}))} opts={[["activo","Ingresado"],["proceso","En Proceso"],["listo","Listo"],["entregado","Entregado"]]}/></FR>
+      <FR><FF label="MARCA" val={f.marca} set={v=>setF(p=>({...p,marca:v}))} ph="Toyota"/>
+        <FF label="MODELO" val={f.modelo} set={v=>setF(p=>({...p,modelo:v}))} ph="Hilux"/>
+        <FF label="ANO" val={f.anio} set={v=>setF(p=>({...p,anio:v}))} ph="2020"/></FR>
+      <FR><FF label="CODIGO COLOR" val={f.codigoColor} set={v=>setF(p=>({...p,codigoColor:v}))} ph="040 / Super White"/>
+        <FF label="TIPO SERVICIO" type="select" val={f.tipoServicio} set={v=>setF(p=>({...p,tipoServicio:v}))} opts={TIPOS.map(x=>[x,x])} ph="Seleccionar..."/></FR>
+    </FS>
+    <FS label="FECHAS">
+      <FR><FF label="FECHA INGRESO" type="date" val={f.fechaIngreso} set={v=>setF(p=>({...p,fechaIngreso:v}))}/>
+        <FF label="ENTREGA ESTIMADA" type="date" val={f.fechaEntrega} set={v=>setF(p=>({...p,fechaEntrega:v}))}/></FR>
+    </FS>
+    <FS label="CLIENTE">
+      <FR><FF label="NOMBRE COMPLETO" val={f.clienteNombre} set={v=>setF(p=>({...p,clienteNombre:v}))} ph="Juan Perez"/>
+        <FF label="RUT" val={f.clienteRut} set={v=>setF(p=>({...p,clienteRut:v}))} ph="12.345.678-9"/>
+        <FF label="TELEFONO" val={f.clienteTel} set={v=>setF(p=>({...p,clienteTel:v}))} ph="+56 9 1234 5678"/></FR>
+    </FS>
+    <FS label="COBRO">
+      <FR><FF label="TOTAL ($)" type="number" val={f.totalCobrar} set={v=>setF(p=>({...p,totalCobrar:v}))} ph="0"/>
+        <FF label="ABONO ($)" type="number" val={f.abono} set={v=>setF(p=>({...p,abono:v}))} ph="0"/>
+        <div style={{flex:1}}>
+          <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:4,fontWeight:700}}>PENDIENTE</div>
+          <div style={{padding:"9px 11px",background:C.black,border:"2px solid "+C.yellow,fontWeight:700,fontSize:18,color:C.yellow}}>{fCLP(pend)}</div>
+        </div></FR>
+      <FF label="OBSERVACIONES" type="textarea" val={f.descripcion} set={v=>setF(p=>({...p,descripcion:v}))} ph="Detalles..."/>
+    </FS>
+  </Modal>;
+}
+
+// Modal Gasto
+function MGasto({g,onSave,onClose}){
+  const[f,setF]=useState({tipo:"trabajo",categoria:"",descripcion:"",monto:"",frecuencia:"diario",fecha:new Date().toISOString().split("T")[0],...g});
+  const cats=f.tipo==="trabajo"?CAT_T:CAT_P;
+  return <Modal title={f.id?"EDITAR GASTO":"NUEVO GASTO"} onClose={onClose} onSave={()=>onSave(f)}>
+    <FR><FF label="TIPO" type="select" val={f.tipo} set={v=>setF(p=>({...p,tipo:v,categoria:""}))} opts={[["trabajo","Trabajo"],["personal","Personal"]]}/>
+      <FF label="CATEGORIA" type="select" val={f.categoria} set={v=>setF(p=>({...p,categoria:v}))} opts={cats.map(x=>[x,x])} ph="Seleccionar..."/></FR>
+    <FR><FF label="FRECUENCIA" type="select" val={f.frecuencia} set={v=>setF(p=>({...p,frecuencia:v}))} opts={[["diario","Diario"],["mensual","Mensual"]]}/>
+      <FF label="FECHA" type="date" val={f.fecha} set={v=>setF(p=>({...p,fecha:v}))}/>
+      <FF label="MONTO ($)" type="number" val={f.monto} set={v=>setF(p=>({...p,monto:v}))} ph="0"/></FR>
+    <FF label="DESCRIPCION" val={f.descripcion} set={v=>setF(p=>({...p,descripcion:v}))} ph="Detalle del gasto..."/>
+  </Modal>;
+}
+
+// Modal Tecnico
+function MTecnico({tc,trabajos,onSave,onClose}){
+  const[f,setF]=useState({nombre:"",especialidad:"",telefono:"",observaciones:"",abonoTecnico:"",asignaciones:[],...tc});
+  function addA(){setF(p=>({...p,asignaciones:[...(p.asignaciones||[]),{trabajoId:"",descripcionTrabajo:"",porcentaje:"",tiempoEstimado:"",tiempoReal:"",horaEntrada:"",horaSalida:""}]}));}
+  function upA(i,k,v){setF(p=>{const a=[...(p.asignaciones||[])];a[i]={...a[i],[k]:v};return{...p,asignaciones:a};});}
+  function delA(i){setF(p=>({...p,asignaciones:(p.asignaciones||[]).filter((_,j)=>j!==i)}));}
+  function cM(a){const tj=trabajos.find(t=>t.id===a.trabajoId);if(!tj)return 0;return(Number(tj.totalCobrar||0)*Number(a.porcentaje||0))/100;}
+  const totC=(f.asignaciones||[]).reduce((s,a)=>s+cM(a),0);
+  const saldo=Math.max(0,totC-Number(f.abonoTecnico||0));
+  function sub(){if(!f.nombre.trim()){alert("Ingresa el nombre");return;}onSave({...f,totalComision:totC,saldoPendiente:saldo});}
+  return <Modal title={f.id?"EDITAR TECNICO":"NUEVO TECNICO"} onClose={onClose} onSave={sub} wide>
+    <FS label="DATOS DEL TECNICO">
+      <FR><FF label="NOMBRE" val={f.nombre} set={v=>setF(p=>({...p,nombre:v}))} ph="Juan Gonzalez"/>
+        <FF label="ESPECIALIDAD" val={f.especialidad} set={v=>setF(p=>({...p,especialidad:v}))} ph="Pintura / Masilla"/>
+        <FF label="TELEFONO" val={f.telefono} set={v=>setF(p=>({...p,telefono:v}))} ph="+56 9..."/></FR>
+    </FS>
+    <FS label="PAGOS AL TECNICO">
+      <FR><FF label="ABONO AL TECNICO ($)" type="number" val={f.abonoTecnico} set={v=>setF(p=>({...p,abonoTecnico:v}))} ph="0"/>
+        <div style={{flex:1}}><div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:4,fontWeight:700}}>COMISION TOTAL</div>
+          <div style={{padding:"9px 11px",background:C.black,border:"1px solid "+C.border,fontWeight:700,fontSize:15,color:C.green}}>{fCLP(totC)}</div></div>
+        <div style={{flex:1}}><div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:4,fontWeight:700}}>SALDO PENDIENTE</div>
+          <div style={{padding:"9px 11px",background:C.black,border:"2px solid "+C.yellow,fontWeight:700,fontSize:15,color:C.yellow}}>{fCLP(saldo)}</div></div>
+      </FR>
+    </FS>
+    <FS label="TRABAJOS ASIGNADOS">
+      {(f.asignaciones||[]).length===0
+        ?<div style={{padding:12,background:C.black,border:"1px dashed "+C.border,textAlign:"center",fontSize:12,color:C.g2}}>Sin trabajos - agrega uno abajo</div>
+        :(f.asignaciones||[]).map((a,i)=>{
+          const tj=trabajos.find(t=>t.id===a.trabajoId);
+          const m=cM(a);
+          const h=diffH(a.horaEntrada,a.horaSalida);
+          return <div key={i} style={{background:C.black,border:"1px solid "+C.border,padding:12,position:"relative"}}>
+            <div style={{position:"absolute",top:6,right:6}}><IBtn color={C.red} onClick={()=>delA(i)}><Ico.trash/></IBtn></div>
+            <FR>
+              <div style={{flex:2,minWidth:140}}>
+                <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:4,fontWeight:700}}>ORDEN</div>
+                <select value={a.trabajoId} onChange={e=>upA(i,"trabajoId",e.target.value)} style={iSt}>
+                  <option value="">Seleccionar...</option>
+                  {trabajos.map(t=><option key={t.id} value={t.id}>{t.nroTrabajo?t.nroTrabajo+" - ":""}{t.patente} {t.marca} {t.modelo}</option>)}
+                </select>
+              </div>
+              <div style={{flex:2,minWidth:140}}>
+                <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:4,fontWeight:700}}>QUE REALIZO</div>
+                <input value={a.descripcionTrabajo} onChange={e=>upA(i,"descripcionTrabajo",e.target.value)} placeholder="Pintura capo..." style={iSt}/>
+              </div>
+              <div style={{minWidth:80}}>
+                <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:4,fontWeight:700}}>% COMISION</div>
+                <input type="number" min="0" max="100" value={a.porcentaje} onChange={e=>upA(i,"porcentaje",e.target.value)} placeholder="0" style={iSt}/>
+              </div>
+              <div style={{minWidth:110}}>
+                <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:4,fontWeight:700}}>MONTO</div>
+                <div style={{padding:"9px 11px",background:"#0A0A0A",border:"2px solid "+C.yellow,fontWeight:700,fontSize:14,color:C.yellow}}>{fCLP(m)}</div>
+              </div>
+            </FR>
+            <FR style={{marginTop:8}}>
+              <div style={{flex:1,minWidth:100}}>
+                <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:4,fontWeight:700}}>TIEMPO EST.</div>
+                <input value={a.tiempoEstimado} onChange={e=>upA(i,"tiempoEstimado",e.target.value)} placeholder="3 dias" style={iSt}/>
+              </div>
+              <div style={{flex:1,minWidth:100}}>
+                <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:4,fontWeight:700}}>TIEMPO REAL</div>
+                <input value={a.tiempoReal} onChange={e=>upA(i,"tiempoReal",e.target.value)} placeholder="4 dias" style={iSt}/>
+              </div>
+              <div style={{flex:1,minWidth:90}}>
+                <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:4,fontWeight:700}}>ENTRADA</div>
+                <input type="time" value={a.horaEntrada} onChange={e=>upA(i,"horaEntrada",e.target.value)} style={iSt}/>
+              </div>
+              <div style={{flex:1,minWidth:90}}>
+                <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:4,fontWeight:700}}>SALIDA</div>
+                <input type="time" value={a.horaSalida} onChange={e=>upA(i,"horaSalida",e.target.value)} style={iSt}/>
+              </div>
+              {h&&<div style={{alignSelf:"flex-end",padding:"9px 11px",background:"#0A0A0A",border:"1px solid "+C.green,color:C.green,fontSize:11,fontWeight:700}}>Jornada: {h}</div>}
+            </FR>
+            {tj&&<div style={{marginTop:6,fontSize:10,color:C.g2}}>Total obra: <b style={{color:C.g1}}>{fCLP(tj.totalCobrar)}</b>{tj.tipoServicio?" - "+tj.tipoServicio:""}</div>}
+          </div>;
+        })
+      }
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
+        <button onClick={addA} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",border:"1px dashed "+C.red,background:"transparent",color:C.red,cursor:"pointer",fontFamily:"Arial,sans-serif",fontSize:10,fontWeight:700,letterSpacing:1.5}}><Ico.plus/> AGREGAR TRABAJO</button>
+        {(f.asignaciones||[]).length>0&&<div style={{display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:8,color:C.g2,letterSpacing:2}}>TOTAL</span>
+          <span style={{fontSize:18,fontWeight:700,color:C.yellow}}>{fCLP(totC)}</span>
+        </div>}
+      </div>
+    </FS>
+    <FS label="OBSERVACIONES">
+      <FF label="" type="textarea" val={f.observaciones} set={v=>setF(p=>({...p,observaciones:v}))} ph="Notas sobre el tecnico..."/>
+    </FS>
+  </Modal>;
+}
+
+// Modal Presupuesto
+function generarPDF(p){
+  const{jsPDF}=window.jspdf;
+  const doc=new jsPDF({unit:"mm",format:"a4"});
+  const W=210,M=18;
+  let y=0;
+  doc.setFillColor(204,0,0);doc.rect(0,0,W,38,"F");
+  doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(18);
+  doc.text("VERGARA Y CIA",M,16);
+  doc.setFontSize(7);doc.setFont("helvetica","normal");doc.setTextColor(255,180,180);
+  doc.text("DESABOLLADURA Y PINTURA AUTOMOTRIZ",M,22);
+  doc.setTextColor(255,255,255);doc.setFont("helvetica","bold");doc.setFontSize(14);
+  doc.text("PRESUPUESTO "+(p.nro||""),W-M,16,{align:"right"});
+  doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(255,220,220);
+  doc.text("Fecha: "+(p.fecha||""),W-M,22,{align:"right"});
+  doc.text("Valido: "+(p.validez||30)+" dias",W-M,27,{align:"right"});
+  doc.setFillColor(0,0,0);doc.rect(0,38,W,2,"F");
+  y=46;
+  // Cliente
+  doc.setFillColor(245,245,245);doc.rect(M-2,y-4,W-2*M+4,26,"F");
+  doc.setFillColor(204,0,0);doc.rect(M-2,y-4,2,26,"F");
+  doc.setTextColor(150,150,150);doc.setFontSize(7);doc.setFont("helvetica","bold");
+  doc.text("CLIENTE",M+2,y+1);
+  doc.setTextColor(0,0,0);doc.setFont("helvetica","bold");doc.setFontSize(12);
+  doc.text(p.clienteNombre||"-",M+2,y+8);
+  doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(80,80,80);
+  if(p.clienteRut)doc.text("RUT: "+p.clienteRut,M+2,y+14);
+  if(p.clienteTel)doc.text("Tel: "+p.clienteTel,M+2,y+19);
+  // Vehiculo
+  doc.setTextColor(150,150,150);doc.setFontSize(7);doc.setFont("helvetica","bold");
+  doc.text("VEHICULO",110,y+1);
+  doc.setTextColor(0,0,0);doc.setFont("helvetica","bold");doc.setFontSize(11);
+  doc.text(p.patente||"-",110,y+8);
+  doc.setFont("helvetica","normal");doc.setFontSize(9);doc.setTextColor(80,80,80);
+  doc.text([p.marca,p.modelo,p.anio].filter(Boolean).join(" ")||"-",110,y+14);
+  if(p.codigoColor)doc.text("Color: "+p.codigoColor,110,y+19);
+  y+=32;
+  // Items header
+  doc.setFillColor(204,0,0);doc.rect(M-2,y,W-2*M+4,7,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(7);doc.setFont("helvetica","bold");
+  doc.text("DESCRIPCION",M+1,y+5);
+  doc.text("CANT.",138,y+5,{align:"right"});
+  doc.text("PRECIO UNIT.",162,y+5,{align:"right"});
+  doc.text("TOTAL",W-M,y+5,{align:"right"});
+  y+=7;
+  (p.items||[]).forEach((it,i)=>{
+    const tot=Number(it.cantidad||0)*Number(it.precioUnit||0);
+    doc.setFillColor(i%2===0?245:250,i%2===0?245:250,i%2===0?245:250);
+    doc.rect(M-2,y,W-2*M+4,8,"F");
+    doc.setTextColor(30,30,30);doc.setFont("helvetica","normal");doc.setFontSize(9);
+    const desc=(it.descripcion||"");
+    doc.text(desc.length>55?desc.substring(0,55)+"...":desc,M+1,y+5.5);
+    doc.text(String(it.cantidad||0),138,y+5.5,{align:"right"});
+    doc.setTextColor(80,80,80);doc.text(fCLP(it.precioUnit),162,y+5.5,{align:"right"});
+    doc.setTextColor(204,0,0);doc.setFont("helvetica","bold");
+    doc.text(fCLP(tot),W-M,y+5.5,{align:"right"});
+    y+=8;
+  });
+  doc.setFillColor(0,0,0);doc.rect(M-2,y,W-2*M+4,14,"F");
+  doc.setTextColor(150,150,150);doc.setFontSize(8);doc.setFont("helvetica","bold");
+  doc.text("TOTAL PRESUPUESTO",W-M,y+5,{align:"right"});
+  doc.setTextColor(221,170,0);doc.setFontSize(16);
+  doc.text(fCLP(p.subtotal||0),W-M,y+12,{align:"right"});
+  y+=18;
+  if(p.notas){
+    const lines=doc.splitTextToSize(p.notas,W-2*M-4);
+    doc.setFillColor(255,248,248);doc.rect(M-2,y,W-2*M+4,lines.length*5+8,"F");
+    doc.setFillColor(204,0,0);doc.rect(M-2,y,2,lines.length*5+8,"F");
+    doc.setTextColor(150,150,150);doc.setFontSize(7);doc.setFont("helvetica","bold");
+    doc.text("GARANTIA Y CONDICIONES",M+2,y+4);
+    doc.setTextColor(60,60,60);doc.setFont("helvetica","normal");doc.setFontSize(8.5);
+    doc.text(lines,M+2,y+9);
+    y+=lines.length*5+12;
+  }
+  // Watermark
+  doc.setGState(new doc.GState({opacity:0.05}));
+  doc.setTextColor(204,0,0);doc.setFont("helvetica","bold");doc.setFontSize(55);
+  doc.text("VERGARA Y CIA",W/2,297/2,{align:"center",angle:45});
+  doc.setGState(new doc.GState({opacity:1}));
+  // Footer
+  doc.setFillColor(204,0,0);doc.rect(0,285,W,12,"F");
+  doc.setTextColor(255,255,255);doc.setFontSize(7.5);doc.setFont("helvetica","normal");
+  doc.text("Vergara y CIA - Desabolladura y Pintura Automotriz",W/2,291,{align:"center"});
+  doc.text("Garantia de 1 ano en pintura, desabolladura y acabados",W/2,295,{align:"center"});
+  doc.save("Presupuesto_"+(p.nro||p.clienteNombre||"taller")+".pdf");
+}
+
+function MPresupuesto({p,onSave,onClose}){
+  const emp={nro:"",fecha:new Date().toISOString().split("T")[0],clienteNombre:"",clienteRut:"",clienteTel:"",patente:"",marca:"",modelo:"",anio:"",codigoColor:"",items:[],notas:"1 ano de garantia en todos los trabajos de pintura y desabolladura.\nAbono del 50% para iniciar los trabajos.\nPresupuesto valido por 30 dias.",validez:"30",estado:"borrador"};
+  const[f,setF]=useState({...emp,...p});
+  function addI(){setF(p=>({...p,items:[...(p.items||[]),{descripcion:"",cantidad:"1",precioUnit:""}]}));}
+  function upI(i,k,v){setF(p=>{const it=[...(p.items||[])];it[i]={...it[i],[k]:v};return{...p,items:it};});}
+  function delI(i){setF(p=>({...p,items:(p.items||[]).filter((_,j)=>j!==i)}));}
+  const sub=(f.items||[]).reduce((s,it)=>s+Number(it.cantidad||0)*Number(it.precioUnit||0),0);
+  function doSave(){if(!f.clienteNombre&&!f.patente){alert("Ingresa nombre o patente");return;}onSave({...f,subtotal:sub});}
+  return <Modal title={f.id?"EDITAR PRESUPUESTO":"NUEVO PRESUPUESTO"} onClose={onClose} onSave={doSave} wide
+    extra={<button onClick={()=>generarPDF({...f,subtotal:sub})} style={{display:"flex",alignItems:"center",gap:5,padding:"8px 14px",border:"1px solid "+C.red,background:"transparent",color:C.red,cursor:"pointer",fontFamily:"Arial,sans-serif",fontSize:10,fontWeight:700,letterSpacing:1.5}}><Ico.print/> PDF</button>}>
+    <FS label="PRESUPUESTO">
+      <FR><FF label="N PRESUPUESTO" val={f.nro} set={v=>setF(p=>({...p,nro:v}))} ph="P-001"/>
+        <FF label="FECHA" type="date" val={f.fecha} set={v=>setF(p=>({...p,fecha:v}))}/>
+        <FF label="VALIDEZ (DIAS)" type="number" val={f.validez} set={v=>setF(p=>({...p,validez:v}))} ph="30"/>
+        <FF label="ESTADO" type="select" val={f.estado} set={v=>setF(p=>({...p,estado:v}))} opts={[["borrador","Borrador"],["enviado","Enviado"],["aprobado","Aprobado"],["rechazado","Rechazado"]]}/></FR>
+    </FS>
+    <FS label="CLIENTE">
+      <FR><FF label="NOMBRE" val={f.clienteNombre} set={v=>setF(p=>({...p,clienteNombre:v}))} ph="Juan Perez"/>
+        <FF label="RUT" val={f.clienteRut} set={v=>setF(p=>({...p,clienteRut:v}))} ph="12.345.678-9"/>
+        <FF label="TELEFONO" val={f.clienteTel} set={v=>setF(p=>({...p,clienteTel:v}))} ph="+56 9..."/></FR>
+    </FS>
+    <FS label="VEHICULO">
+      <FR><FF label="PATENTE" val={f.patente} set={v=>setF(p=>({...p,patente:v.toUpperCase()}))} ph="BBCC12"/>
+        <FF label="MARCA" val={f.marca} set={v=>setF(p=>({...p,marca:v}))} ph="Toyota"/>
+        <FF label="MODELO" val={f.modelo} set={v=>setF(p=>({...p,modelo:v}))} ph="Hilux"/>
+        <FF label="ANO" val={f.anio} set={v=>setF(p=>({...p,anio:v}))} ph="2021"/>
+        <FF label="COLOR" val={f.codigoColor} set={v=>setF(p=>({...p,codigoColor:v}))} ph="040 Blanco"/></FR>
+    </FS>
+    <FS label="ITEMS">
+      {(f.items||[]).length===0
+        ?<div style={{padding:12,background:C.black,border:"1px dashed "+C.border,textAlign:"center",fontSize:12,color:C.g2}}>Sin items - agrega servicios o materiales</div>
+        :<>
+          <div style={{display:"grid",gridTemplateColumns:"3fr 1fr 1fr 1fr auto",gap:6,marginBottom:4}}>
+            {["DESCRIPCION","CANT.","PRECIO UNIT.","TOTAL",""].map(h=><div key={h} style={{fontSize:8,color:C.g2,letterSpacing:1.5,fontWeight:700}}>{h}</div>)}
+          </div>
+          {(f.items||[]).map((it,i)=>{
+            const tot=Number(it.cantidad||0)*Number(it.precioUnit||0);
+            return <div key={i} style={{display:"grid",gridTemplateColumns:"3fr 1fr 1fr 1fr auto",gap:6,alignItems:"center"}}>
+              <input value={it.descripcion} onChange={e=>upI(i,"descripcion",e.target.value)} placeholder="Pintura capo..." style={iSt}/>
+              <input type="number" value={it.cantidad} onChange={e=>upI(i,"cantidad",e.target.value)} placeholder="1" style={iSt}/>
+              <input type="number" value={it.precioUnit} onChange={e=>upI(i,"precioUnit",e.target.value)} placeholder="0" style={iSt}/>
+              <div style={{padding:"9px 11px",background:"#0A0A0A",border:"1px solid "+C.border,color:C.yellow,fontWeight:700,fontSize:12,textAlign:"right"}}>{fCLP(tot)}</div>
+              <IBtn color={C.red} onClick={()=>delI(i)}><Ico.trash/></IBtn>
+            </div>;
+          })}
+        </>
+      }
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:4}}>
+        <button onClick={addI} style={{display:"flex",alignItems:"center",gap:5,padding:"8px 14px",border:"1px dashed "+C.red,background:"transparent",color:C.red,cursor:"pointer",fontFamily:"Arial,sans-serif",fontSize:10,fontWeight:700,letterSpacing:1.5}}><Ico.plus/> AGREGAR ITEM</button>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:8,color:C.g2,letterSpacing:2}}>TOTAL</span>
+          <span style={{fontSize:20,fontWeight:700,color:C.yellow}}>{fCLP(sub)}</span>
+        </div>
+      </div>
+    </FS>
+    <FS label="GARANTIA Y CONDICIONES">
+      <FF label="" type="textarea" val={f.notas} set={v=>setF(p=>({...p,notas:v}))} ph="Condiciones..."/>
+    </FS>
+  </Modal>;
+}
+
+// Vista previa presupuesto
+function VPres({p,onClose,onEdit}){
+  const EC={borrador:C.g2,enviado:C.blue,aprobado:C.green,rechazado:C.red};
+  const ec=EC[p.estado]||C.g2;
+  const sub=(p.items||[]).reduce((s,it)=>s+Number(it.cantidad||0)*Number(it.precioUnit||0),0);
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.96)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16,overflowY:"auto"}}>
+    <div style={{width:"100%",maxWidth:700,animation:"fadein 0.15s ease"}}>
+      <div style={{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:12}}>
+        <button onClick={()=>generarPDF({...p,subtotal:sub})} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",border:"1px solid "+C.red,background:"transparent",color:C.red,cursor:"pointer",fontFamily:"Arial,sans-serif",fontSize:10,fontWeight:700,letterSpacing:1.5}}><Ico.print/> DESCARGAR PDF</button>
+        <button onClick={onEdit} style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",border:"1px solid "+C.border,background:"transparent",color:C.g1,cursor:"pointer",fontFamily:"Arial,sans-serif",fontSize:10,fontWeight:700,letterSpacing:1.5}}><Ico.edit/> EDITAR</button>
+        <IBtn color={C.g2} onClick={onClose}><Ico.close/></IBtn>
+      </div>
+      <div style={{background:"#111",border:"1px solid "+C.border,position:"relative",overflow:"hidden"}}>
+        <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none",transform:"rotate(-45deg)",opacity:0.04,zIndex:0}}>
+          <div style={{textAlign:"center",fontFamily:"Arial,sans-serif"}}>
+            <div style={{fontSize:52,fontWeight:900,color:C.red,letterSpacing:4,lineHeight:1}}>VERGARA Y CIA</div>
+            <div style={{fontSize:22,fontWeight:700,color:C.red,letterSpacing:6,marginTop:8}}>DESABOLLADURA Y PINTURA</div>
+          </div>
+        </div>
+        <div style={{position:"relative",zIndex:1}}>
+          <div style={{background:C.red,padding:"20px 28px 16px",borderBottom:"3px solid #000"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div>
+                <div style={{fontSize:20,fontWeight:900,letterSpacing:3,color:C.white}}>VERGARA Y CIA</div>
+                <div style={{fontSize:8,color:"#ffaaaa",letterSpacing:5,marginTop:2}}>DESABOLLADURA Y PINTURA AUTOMOTRIZ</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:9,color:"#ffaaaa",letterSpacing:2}}>PRESUPUESTO</div>
+                <div style={{fontSize:22,fontWeight:900,color:C.white,marginTop:1}}>{p.nro||"-"}</div>
+                <div style={{fontSize:9,color:"#ffdddd",marginTop:4}}>Fecha: {fDate(p.fecha)}</div>
+                <div style={{fontSize:9,color:"#ffdddd"}}>Valido: {p.validez||30} dias</div>
+                <span style={{display:"inline-block",marginTop:5,fontSize:8,fontWeight:700,letterSpacing:2,color:ec,border:"1px solid "+ec,padding:"2px 10px",background:C.white}}>{(p.estado||"").toUpperCase()}</span>
+              </div>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:"1px solid "+C.border}}>
+            <div style={{padding:"14px 24px",borderRight:"1px solid "+C.border,borderLeft:"3px solid "+C.red}}>
+              <div style={{fontSize:7,color:C.red,letterSpacing:3,fontWeight:700,marginBottom:6}}>CLIENTE</div>
+              <div style={{fontSize:14,fontWeight:700,color:C.white}}>{p.clienteNombre||"-"}</div>
+              {p.clienteRut&&<div style={{fontSize:10,color:C.g2,marginTop:3}}>RUT: {p.clienteRut}</div>}
+              {p.clienteTel&&<div style={{fontSize:10,color:C.g2}}>Tel: {p.clienteTel}</div>}
+            </div>
+            <div style={{padding:"14px 24px"}}>
+              <div style={{fontSize:7,color:C.red,letterSpacing:3,fontWeight:700,marginBottom:6}}>VEHICULO</div>
+              <div style={{fontSize:14,fontWeight:700,color:C.white,letterSpacing:1}}>{p.patente||"-"}</div>
+              <div style={{fontSize:11,color:C.g2,marginTop:2}}>{[p.marca,p.modelo,p.anio].filter(Boolean).join(" ")||"-"}</div>
+              {p.codigoColor&&<div style={{fontSize:10,color:C.g2}}>Color: {p.codigoColor}</div>}
+            </div>
+          </div>
+          <div>
+            <div style={{display:"grid",gridTemplateColumns:"3fr 1fr 1fr 1fr",background:C.red,padding:"7px 12px"}}>
+              {["DESCRIPCION","CANT.","PRECIO UNIT.","TOTAL"].map((h,i)=><div key={h} style={{fontSize:7,fontWeight:700,letterSpacing:1.5,color:C.white,textAlign:i>0?"right":"left"}}>{h}</div>)}
+            </div>
+            {(p.items||[]).length===0
+              ?<div style={{padding:"16px",color:C.g2,fontSize:11,textAlign:"center"}}>Sin items</div>
+              :(p.items||[]).map((it,i)=>{
+                const tot=Number(it.cantidad||0)*Number(it.precioUnit||0);
+                return <div key={i} style={{display:"grid",gridTemplateColumns:"3fr 1fr 1fr 1fr",padding:"9px 12px",background:i%2===0?"#0A0A0A":"#111",borderBottom:"1px solid "+C.border}}>
+                  <div style={{fontSize:12,color:C.white}}>{it.descripcion||"-"}</div>
+                  <div style={{fontSize:11,color:C.g1,textAlign:"right"}}>{it.cantidad||0}</div>
+                  <div style={{fontSize:11,color:C.g1,textAlign:"right"}}>{fCLP(it.precioUnit)}</div>
+                  <div style={{fontSize:12,fontWeight:700,color:C.yellow,textAlign:"right"}}>{fCLP(tot)}</div>
+                </div>;
+              })
+            }
+            <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:16,padding:"14px 12px",background:C.black,borderTop:"2px solid "+C.red}}>
+              <span style={{fontSize:9,color:C.g2,letterSpacing:2,fontWeight:700}}>TOTAL PRESUPUESTO</span>
+              <span style={{fontSize:26,fontWeight:900,color:C.yellow}}>{fCLP(sub)}</span>
+            </div>
+          </div>
+          {p.notas&&<div style={{margin:"0 0 0",padding:"12px 24px",background:"#0A0A0A",borderLeft:"3px solid "+C.border,borderTop:"1px solid "+C.border}}>
+            <div style={{fontSize:7,color:C.g2,letterSpacing:3,fontWeight:700,marginBottom:5}}>GARANTIA Y CONDICIONES</div>
+            <div style={{fontSize:11,color:C.g1,lineHeight:1.7,whiteSpace:"pre-wrap"}}>{p.notas}</div>
+          </div>}
+          <div style={{background:C.red,padding:"10px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:8,color:"#ffdddd",letterSpacing:1}}>Vergara y CIA - Desabolladura y Pintura Automotriz</div>
+            <div style={{fontSize:8,color:"#ffdddd"}}>1 ano de garantia en todos los trabajos</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+// Tabla Gastos
+function TGasto({title,gastos,color,onEdit,onDelete}){
+  const tot=gastos.reduce((a,g)=>a+Number(g.monto||0),0);
+  return <div style={{border:"1px solid "+C.border}}>
+    <div style={{padding:"10px 16px",background:C.card,borderBottom:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center",borderLeft:"3px solid "+color}}>
+      <span style={{fontSize:9,fontWeight:700,letterSpacing:2,color:C.g1}}>{title}</span>
+      <span style={{fontSize:13,fontWeight:700,color}}>{fCLP(tot)}</span>
+    </div>
+    {gastos.length===0
+      ?<div style={{padding:16,color:C.g2,fontSize:11,textAlign:"center"}}>Sin registros este periodo</div>
+      :<div style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse"}}>
+          <thead><tr style={{background:C.surface}}>
+            {["FECHA","CATEGORIA","DESCRIPCION","TIPO","MONTO",""].map(h=><th key={h} style={{padding:"7px 12px",textAlign:"left",fontSize:8,color:C.g2,fontWeight:700,letterSpacing:1.5,borderBottom:"1px solid "+C.border,whiteSpace:"nowrap"}}>{h}</th>)}
+          </tr></thead>
+          <tbody>{gastos.map(g=><tr key={g.id} className="rhov" style={{borderBottom:"1px solid "+C.border}}>
+            <td style={{padding:"9px 12px",fontSize:11,color:C.g1,whiteSpace:"nowrap"}}>{fDate(g.fecha)}</td>
+            <td style={{padding:"9px 12px",fontSize:12,fontWeight:600}}>{g.categoria}</td>
+            <td style={{padding:"9px 12px",fontSize:11,color:C.g1}}>{g.descripcion||"-"}</td>
+            <td style={{padding:"9px 12px",whiteSpace:"nowrap"}}>
+              <span style={{fontSize:8,fontWeight:700,letterSpacing:1,padding:"2px 7px",border:"1px solid "+(g.frecuencia==="mensual"?C.blue:C.red),color:g.frecuencia==="mensual"?C.blue:C.red}}>{g.frecuencia==="mensual"?"MENSUAL":"DIARIO"}</span>
+            </td>
+            <td style={{padding:"9px 12px",fontWeight:700,fontSize:12,whiteSpace:"nowrap"}}>{fCLP(g.monto)}</td>
+            <td style={{padding:"9px 12px"}}><div style={{display:"flex",gap:4}}>
+              <IBtn color={C.g1} onClick={()=>onEdit(g)}><Ico.edit/></IBtn>
+              <IBtn color={C.red} onClick={()=>onDelete(g.id)}><Ico.trash/></IBtn>
+            </div></td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    }
+  </div>;
+}
+
+// Tarjeta Tecnico
+function TTecnico({tc,trabajos,onEdit,onDelete}){
+  const[open,setOpen]=useState(false);
+  const asis=tc.asignaciones||[];
+  const totC=tc.totalComision||asis.reduce((s,a)=>{const tj=trabajos.find(t=>t.id===a.trabajoId);return s+(Number(tj&&tj.totalCobrar||0)*Number(a.porcentaje||0))/100;},0);
+  const saldo=tc.saldoPendiente!=null?tc.saldoPendiente:totC;
+  return <div style={{background:C.card,borderLeft:"3px solid "+C.red,border:"1px solid "+C.border}}>
+    <div style={{display:"flex",alignItems:"stretch"}}>
+      <div onClick={()=>setOpen(!open)} style={{flex:1,padding:"14px 16px",display:"flex",alignItems:"center",gap:12,cursor:"pointer"}}>
+        <div style={{width:36,height:36,background:C.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontWeight:700,fontSize:14,color:C.white}}>{(tc.nombre||"?")[0].toUpperCase()}</div>
+        <div>
+          <div style={{fontSize:14,fontWeight:700}}>{tc.nombre||"Sin nombre"}</div>
+          <div style={{fontSize:10,color:C.g2,marginTop:2}}>{tc.especialidad||"Sin especialidad"}</div>
+        </div>
+      </div>
+      <div onClick={()=>setOpen(!open)} style={{padding:"14px 12px",borderLeft:"1px solid "+C.border,textAlign:"center",minWidth:80,cursor:"pointer"}}>
+        <div style={{fontSize:8,color:C.g2,letterSpacing:1}}>TRABAJOS</div>
+        <div style={{fontSize:20,fontWeight:700,color:C.g1,marginTop:2}}>{asis.length}</div>
+      </div>
+      <div onClick={()=>setOpen(!open)} style={{padding:"14px 12px",borderLeft:"1px solid "+C.border,textAlign:"right",minWidth:130,cursor:"pointer"}}>
+        <div style={{fontSize:8,color:C.g2,letterSpacing:1}}>COMISION</div>
+        <div style={{fontSize:14,fontWeight:700,color:C.green,marginTop:1}}>{fCLP(totC)}</div>
+        <div style={{fontSize:8,color:C.g2,marginTop:1}}>Abono: {fCLP(Number(tc.abonoTecnico||0))}</div>
+      </div>
+      <div onClick={()=>setOpen(!open)} style={{padding:"14px 12px",borderLeft:"1px solid "+C.border,textAlign:"right",minWidth:130,cursor:"pointer"}}>
+        <div style={{fontSize:8,color:C.g2,letterSpacing:1}}>SALDO</div>
+        <div style={{fontSize:16,fontWeight:700,color:C.yellow,marginTop:2}}>{fCLP(saldo)}</div>
+      </div>
+      <div style={{padding:"14px 10px",borderLeft:"1px solid "+C.border,display:"flex",gap:4,alignItems:"center"}}>
+        <IBtn color={C.g1} onClick={onEdit}><Ico.edit/></IBtn>
+        <IBtn color={C.red} onClick={onDelete}><Ico.trash/></IBtn>
+      </div>
+      <div onClick={()=>setOpen(!open)} style={{padding:"14px 10px",borderLeft:"1px solid "+C.border,color:C.g2,fontSize:10,cursor:"pointer",display:"flex",alignItems:"center"}}>{open?"^":"v"}</div>
+    </div>
+    {open&&<div style={{borderTop:"1px solid "+C.border}}>
+      {asis.length===0
+        ?<div style={{padding:"14px 18px",color:C.g2,fontSize:11}}>Sin trabajos asignados</div>
+        :<>
+          <div style={{padding:"7px 16px",background:C.surface,display:"grid",gridTemplateColumns:"2fr 2fr 1fr 1fr 1fr 1fr 1fr",gap:8}}>
+            {["N ORDEN","QUE REALIZO","T.EST.","T.REAL","ENTRADA","SALIDA","MONTO"].map(h=><div key={h} style={{fontSize:8,color:C.g2,letterSpacing:1,fontWeight:700}}>{h}</div>)}
+          </div>
+          {asis.map((a,i)=>{
+            const tj=trabajos.find(t=>t.id===a.trabajoId);
+            const m=(Number(tj&&tj.totalCobrar||0)*Number(a.porcentaje||0))/100;
+            const h=diffH(a.horaEntrada,a.horaSalida);
+            return <div key={i} className="rhov" style={{padding:"9px 16px",borderTop:"1px solid "+C.border,display:"grid",gridTemplateColumns:"2fr 2fr 1fr 1fr 1fr 1fr 1fr",gap:8,alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:11,fontWeight:700}}>{tj&&tj.nroTrabajo||"-"}</div>
+                {tj&&<div style={{fontSize:9,color:C.g2}}>{tj.patente} - {tj.clienteNombre}</div>}
+              </div>
+              <div style={{fontSize:11}}>{a.descripcionTrabajo||"-"}</div>
+              <div style={{fontSize:10,color:C.g1}}>{a.tiempoEstimado||"-"}</div>
+              <div style={{fontSize:10,color:a.tiempoReal&&a.tiempoEstimado&&a.tiempoReal>a.tiempoEstimado?C.red:C.g1}}>{a.tiempoReal||"-"}</div>
+              <div style={{fontSize:10,color:C.g1}}>{a.horaEntrada||"-"}</div>
+              <div style={{fontSize:10,color:C.g1}}>{a.horaSalida?a.horaSalida+(h?" ("+h+")":""):"-"}</div>
+              <div style={{fontSize:12,fontWeight:700,color:C.yellow}}>{fCLP(m)}</div>
+            </div>;
+          })}
+          <div style={{padding:"9px 16px",borderTop:"1px solid "+C.border,display:"flex",justifyContent:"flex-end",background:C.surface,gap:20,alignItems:"center"}}>
+            <span style={{fontSize:8,color:C.g2,letterSpacing:2}}>COMISION TOTAL</span>
+            <span style={{fontSize:14,fontWeight:700,color:C.green}}>{fCLP(totC)}</span>
+            <span style={{fontSize:8,color:C.g2,letterSpacing:2}}>SALDO</span>
+            <span style={{fontSize:16,fontWeight:700,color:C.yellow}}>{fCLP(saldo)}</span>
+          </div>
+        </>
+      }
+      {tc.observaciones&&<div style={{padding:"10px 16px",borderTop:"1px solid "+C.border,fontSize:11,color:C.g1,background:C.surface}}><b style={{fontSize:8,color:C.g2,letterSpacing:2}}>OBSERVACIONES: </b>{tc.observaciones}</div>}
+    </div>}
+  </div>;
+}
+
+// Cat Panel para resumen
+function CatP({title,cats,total,color}){
+  const items=Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+  return <div style={{background:C.card,border:"1px solid "+C.border}}>
+    <div style={{padding:"10px 16px",borderBottom:"1px solid "+C.border,display:"flex",justifyContent:"space-between",borderLeft:"3px solid "+color}}>
+      <span style={{fontSize:8,fontWeight:700,letterSpacing:2,color:C.g1}}>{title}</span>
+      <span style={{fontWeight:700,color,fontSize:13}}>{fCLP(total)}</span>
+    </div>
+    <div style={{padding:14}}>
+      {items.length===0
+        ?<div style={{color:C.g2,fontSize:11,textAlign:"center",padding:14}}>Sin datos este periodo</div>
+        :items.map(([cat,monto])=><div key={cat} style={{marginBottom:10}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4,fontSize:11}}>
+            <span style={{color:C.g1}}>{cat}</span><span style={{fontWeight:700}}>{fCLP(monto)}</span>
+          </div>
+          <div style={{height:2,background:C.border}}>
+            <div style={{height:2,background:color,width:(total>0?(monto/total)*100:0)+"%",transition:"width 0.4s"}}/>
+          </div>
+        </div>)
+      }
+    </div>
+  </div>;
+}
+
+// Detalle Trabajo
+function DTrabajo({t,onClose,onEdit,onDelete}){
+  const ES={activo:["INGRESADO",C.red],proceso:["EN PROCESO",C.yellow],listo:["LISTO",C.green],entregado:["ENTREGADO",C.g2]};
+  const[lbl,col]=ES[t.estado]||["-",C.g2];
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+    <div style={{background:C.surface,border:"1px solid "+C.border,borderTop:"3px solid "+C.red,width:"100%",maxWidth:580,maxHeight:"90vh",overflow:"auto",animation:"fadein 0.15s ease"}}>
+      <div style={{padding:"16px 20px",borderBottom:"1px solid "+C.border,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div>
+          <div style={{fontSize:8,color:C.g2,letterSpacing:3}}>ORDEN DE TRABAJO</div>
+          <div style={{fontWeight:700,fontSize:20,letterSpacing:2,marginTop:2}}>{t.nroTrabajo||t.patente||"SIN NUMERO"}</div>
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <IBtn color={C.g1} onClick={onEdit}><Ico.edit/></IBtn>
+          <IBtn color={C.red} onClick={onDelete}><Ico.trash/></IBtn>
+          <IBtn color={C.g2} onClick={onClose}><Ico.close/></IBtn>
+        </div>
+      </div>
+      <div style={{padding:20}}>
+        <div style={{display:"flex",gap:8,marginBottom:18,flexWrap:"wrap"}}>
+          <span style={{fontSize:8,fontWeight:700,letterSpacing:2,color:col,border:"1px solid "+col,padding:"3px 10px"}}>{lbl}</span>
+          {t.tipoServicio&&<span style={{fontSize:8,fontWeight:700,letterSpacing:2,color:C.g1,border:"1px solid "+C.border,padding:"3px 10px"}}>{t.tipoServicio.toUpperCase()}</span>}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+          {[["Patente",t.patente],["Vehiculo",[t.marca,t.modelo,t.anio].filter(Boolean).join(" ")],["Color",t.codigoColor],["Ingreso",fDate(t.fechaIngreso)],["Entrega",fDate(t.fechaEntrega)]].filter(([,v])=>v).map(([l,v])=><div key={l}>
+            <div style={{fontSize:8,color:C.g2,letterSpacing:1}}>{l.toUpperCase()}</div>
+            <div style={{fontSize:12,marginTop:2}}>{v}</div>
+          </div>)}
+        </div>
+        <div style={{height:1,background:C.border,margin:"14px 0"}}/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+          {[["Nombre",t.clienteNombre],["RUT",t.clienteRut],["Telefono",t.clienteTel]].filter(([,v])=>v).map(([l,v])=><div key={l}>
+            <div style={{fontSize:8,color:C.g2,letterSpacing:1}}>{l.toUpperCase()}</div>
+            <div style={{fontSize:12,marginTop:2}}>{v}</div>
+          </div>)}
+        </div>
+        <div style={{height:1,background:C.border,margin:"14px 0"}}/>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:2}}>
+          {[["TOTAL",fCLP(t.totalCobrar),C.g1],["ABONO",fCLP(t.abono),C.green],["PENDIENTE",fCLP(t.pendiente),C.yellow]].map(([l,v,c])=><div key={l} style={{background:C.black,padding:"12px 14px",textAlign:"center",borderLeft:l==="PENDIENTE"?"2px solid "+C.yellow:"none"}}>
+            <div style={{fontSize:8,color:C.g2,letterSpacing:2}}>{l}</div>
+            <div style={{fontWeight:700,fontSize:18,color:c,marginTop:3}}>{v}</div>
+          </div>)}
+        </div>
+        {t.descripcion&&<div style={{marginTop:12,padding:12,background:C.black,borderLeft:"2px solid "+C.border,fontSize:12,color:C.g1}}>{t.descripcion}</div>}
+      </div>
+    </div>
+  </div>;
+}
+
+// APP PRINCIPAL
+function App(){
+  const[tab,setTab]=useState("trabajos");
+  const[data,setData]=useState(()=>load());
+  const[mTrabajo,setMTrabajo]=useState(null);
+  const[mGasto,setMGasto]=useState(null);
+  const[mTecnico,setMTecnico]=useState(null);
+  const[mPres,setMPres]=useState(null);
+  const[vTrabajo,setVTrabajo]=useState(null);
+  const[vPres,setVPres]=useState(null);
+  const[mes,setMes]=useState(()=>{const n=new Date();return n.getFullYear()+"-"+String(n.getMonth()+1).padStart(2,"0");});
+
+  useEffect(()=>{
+    let bc;
+    try{bc=new BroadcastChannel(KEY);bc.onmessage=()=>setData(load());}catch{}
+    const onS=()=>setData(load());
+    window.addEventListener("storage",onS);
+    return()=>{if(bc)bc.close();window.removeEventListener("storage",onS);};
+  },[]);
+
+  function upD(d){setData(d);save(d);}
+  function sTrabajo(t){upD(t.id?{...data,trabajos:data.trabajos.map(x=>x.id===t.id?t:x)}:{...data,trabajos:[{...t,id:Date.now().toString()},...data.trabajos]});setMTrabajo(null);}
+  function dTrabajo(id){if(!confirm("Eliminar?"))return;upD({...data,trabajos:data.trabajos.filter(x=>x.id!==id)});setVTrabajo(null);}
+  function sGasto(g){upD(g.id?{...data,gastos:data.gastos.map(x=>x.id===g.id?g:x)}:{...data,gastos:[{...g,id:Date.now().toString()},...data.gastos]});setMGasto(null);}
+  function dGasto(id){if(!confirm("Eliminar?"))return;upD({...data,gastos:data.gastos.filter(x=>x.id!==id)});}
+  function sTecnico(tc){upD(tc.id?{...data,tecnicos:data.tecnicos.map(x=>x.id===tc.id?tc:x)}:{...data,tecnicos:[{...tc,id:Date.now().toString()},...data.tecnicos]});setMTecnico(null);}
+  function dTecnico(id){if(!confirm("Eliminar?"))return;upD({...data,tecnicos:data.tecnicos.filter(x=>x.id!==id)});}
+  function sPres(p){upD(p.id?{...data,presupuestos:data.presupuestos.map(x=>x.id===p.id?p:x)}:{...data,presupuestos:[{...p,id:Date.now().toString()},...data.presupuestos]});setMPres(null);}
+  function dPres(id){if(!confirm("Eliminar?"))return;upD({...data,presupuestos:data.presupuestos.filter(x=>x.id!==id)});}
+
+  const gMes=data.gastos.filter(g=>g.fecha&&g.fecha.startsWith(mes));
+  const gT=gMes.filter(g=>g.tipo==="trabajo");
+  const gP=gMes.filter(g=>g.tipo==="personal");
+  const activos=data.trabajos.filter(t=>t.estado!=="entregado");
+  const pend=data.trabajos.reduce((a,t)=>a+Number(t.pendiente||0),0);
+  function calcTc(tc){return(tc.asignaciones||[]).reduce((s,a)=>{const tj=data.trabajos.find(t=>t.id===a.trabajoId);return s+(Number(tj&&tj.totalCobrar||0)*Number(a.porcentaje||0))/100;},0);}
+  const ES={activo:["INGRESADO",C.red],proceso:["EN PROCESO",C.yellow],listo:["LISTO",C.green],entregado:["ENTREGADO",C.g2]};
+  const PS={borrador:[C.g2,"BORRADOR"],enviado:[C.blue,"ENVIADO"],aprobado:[C.green,"APROBADO"],rechazado:[C.red,"RECHAZADO"]};
+  const TABS=[["trabajos",<Ico.car/>,"TRABAJOS"],["gastos",<Ico.money/>,"FINANZAS"],["tecnicos",<Ico.team/>,"TECNICOS"],["presupuestos",<Ico.doc/>,"PRESUPUESTOS"],["resumen",<Ico.chart/>,"RESUMEN"]];
+
+  return <div style={{minHeight:"100vh",background:C.black,color:C.white,fontFamily:"Arial,Helvetica,sans-serif",fontSize:14}}>
+    <header style={{background:C.surface,borderBottom:"2px solid "+C.red,position:"sticky",top:0,zIndex:50}}>
+      <div style={{maxWidth:1200,margin:"0 auto",padding:"0 16px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52,flexWrap:"wrap",gap:4}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:34,height:34,background:C.red,display:"flex",alignItems:"center",justifyContent:"center"}}><Ico.wrench/></div>
+          <div>
+            <div style={{fontWeight:700,fontSize:13,letterSpacing:2,color:C.white}}>VERGARA Y CIA</div>
+            <div style={{fontSize:8,color:C.g2,letterSpacing:3}}>SISTEMA DE GESTION</div>
+          </div>
+        </div>
+        <nav style={{display:"flex",gap:2,flexWrap:"wrap"}}>
+          {TABS.map(([id,ico,lbl])=><button key={id} onClick={()=>setTab(id)} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",border:"none",cursor:"pointer",background:tab===id?C.red:"transparent",color:tab===id?C.white:C.g2,fontFamily:"Arial,sans-serif",fontSize:9,fontWeight:700,letterSpacing:1.5,transition:"all 0.15s",whiteSpace:"nowrap"}}>{ico}{lbl}</button>)}
+        </nav>
+        <div style={{fontSize:9,color:C.g2}}>Vergara y CIA</div>
+      </div>
+      <div style={{height:1,background:"linear-gradient(90deg,"+C.red+",transparent)"}}/>
+    </header>
+
+    <main style={{maxWidth:1200,margin:"0 auto",padding:"22px 16px"}}>
+
+      {/* TRABAJOS */}
+      {tab==="trabajos"&&<div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:2,marginBottom:22,border:"1px solid "+C.border}}>
+          {[[{label:"ACTIVOS",val:activos.length,color:C.red,sub:data.trabajos.filter(t=>t.estado==="entregado").length+" entregados"}],[{label:"PENDIENTE COBRO",val:fCLP(pend),color:C.yellow,sub:"por cobrar"}],[{label:"TOTAL ORDENES",val:data.trabajos.length,color:C.g1,sub:"en sistema"}]].flat().map((k,i)=><div key={i} style={{background:C.card,padding:"18px 20px",borderLeft:i===0?"3px solid "+C.red:"none"}}>
+            <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:5}}>{k.label}</div>
+            <div style={{fontSize:26,fontWeight:700,color:k.color,lineHeight:1}}>{k.val}</div>
+            <div style={{fontSize:10,color:C.g2,marginTop:5}}>{k.sub}</div>
+          </div>)}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:3,height:18,background:C.red}}/><span style={{fontWeight:700,fontSize:12,letterSpacing:2}}>ORDENES DE TRABAJO</span></div>
+          <Btn red onClick={()=>setMTrabajo({})}><Ico.plus/> NUEVO TRABAJO</Btn>
+        </div>
+        {data.trabajos.length===0?<Empty msg="No hay trabajos registrados"/>
+          :<div style={{display:"flex",flexDirection:"column",gap:2}}>
+            {data.trabajos.map(t=>{
+              const[lbl,col]=ES[t.estado]||["-",C.g2];
+              return <div key={t.id} style={{background:C.card,borderLeft:"3px solid "+col,display:"flex",alignItems:"stretch",border:"1px solid "+C.border}}>
+                <div onClick={()=>setVTrabajo(t)} style={{width:90,padding:"12px 14px",borderRight:"1px solid "+C.border,flexShrink:0,cursor:"pointer"}}>
+                  <div style={{fontSize:13,fontWeight:700,letterSpacing:1}}>{t.patente||"-"}</div>
+                  <div style={{fontSize:9,color:C.g2,marginTop:1}}>N {t.nroTrabajo||"-"}</div>
+                </div>
+                <div onClick={()=>setVTrabajo(t)} style={{flex:1,padding:"12px 14px",borderRight:"1px solid "+C.border,cursor:"pointer"}}>
+                  <div style={{fontSize:12,fontWeight:600}}>{[t.marca,t.modelo,t.anio].filter(Boolean).join(" ")||"Sin datos"}</div>
+                  {t.tipoServicio&&<div style={{fontSize:10,color:C.g2,marginTop:1}}>{t.tipoServicio}</div>}
+                </div>
+                <div onClick={()=>setVTrabajo(t)} style={{flex:1,padding:"12px 14px",borderRight:"1px solid "+C.border,cursor:"pointer"}}>
+                  <div style={{fontSize:12,fontWeight:600}}>{t.clienteNombre||"Sin nombre"}</div>
+                  <div style={{fontSize:10,color:C.g2,marginTop:1}}>{t.clienteTel||""}</div>
+                </div>
+                <div onClick={()=>setVTrabajo(t)} style={{width:110,padding:"12px 12px",borderRight:"1px solid "+C.border,flexShrink:0,textAlign:"right",cursor:"pointer"}}>
+                  <div style={{fontSize:8,color:C.g2,letterSpacing:1}}>PENDIENTE</div>
+                  <div style={{fontSize:13,fontWeight:700,color:C.yellow,marginTop:1}}>{fCLP(t.pendiente)}</div>
+                  <div style={{fontSize:8,color:C.g2,marginTop:2}}>Entrega: {fDate(t.fechaEntrega)}</div>
+                </div>
+                <div style={{width:110,padding:"12px 12px",flexShrink:0,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
+                  <span style={{fontSize:8,fontWeight:700,letterSpacing:1.5,color:col,border:"1px solid "+col,padding:"2px 7px"}}>{lbl}</span>
+                  <div style={{display:"flex",gap:4}}>
+                    <IBtn color={C.g1} onClick={()=>setMTrabajo(t)}><Ico.edit/></IBtn>
+                    <IBtn color={C.red} onClick={()=>dTrabajo(t.id)}><Ico.trash/></IBtn>
+                  </div>
+                </div>
+              </div>;
+            })}
+          </div>
+        }
+      </div>}
+
+      {/* GASTOS */}
+      {tab==="gastos"&&<div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18,flexWrap:"wrap",gap:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:3,height:18,background:C.red}}/><span style={{fontWeight:700,fontSize:12,letterSpacing:2}}>REGISTRO DE GASTOS</span></div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <input type="month" value={mes} onChange={e=>setMes(e.target.value)} style={{background:C.card,border:"1px solid "+C.border,padding:"7px 10px",color:C.white,fontSize:11,fontFamily:"Arial,sans-serif",outline:"none"}}/>
+            <Btn red onClick={()=>setMGasto({})}><Ico.plus/> AGREGAR GASTO</Btn>
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:2,marginBottom:18}}>
+          {[[C.red,"GASTOS DE TRABAJO",gT],[C.blue,"GASTOS PERSONALES",gP]].map(([color,lbl,gs])=><div key={lbl} style={{background:C.card,padding:"16px 18px",borderLeft:"3px solid "+color}}>
+            <div style={{fontSize:8,color:C.g2,letterSpacing:2}}>{lbl}</div>
+            <div style={{fontSize:22,fontWeight:700,color,marginTop:3}}>{fCLP(gs.reduce((a,g)=>a+Number(g.monto||0),0))}</div>
+            <div style={{fontSize:10,color:C.g2,marginTop:3}}>{gs.length} registros este mes</div>
+          </div>)}
+        </div>
+        <TGasto title="GASTOS DE TRABAJO" gastos={gT} color={C.red} onEdit={setMGasto} onDelete={dGasto}/>
+        <div style={{height:10}}/>
+        <TGasto title="GASTOS PERSONALES" gastos={gP} color={C.blue} onEdit={setMGasto} onDelete={dGasto}/>
+      </div>}
+
+      {/* TECNICOS */}
+      {tab==="tecnicos"&&<div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:2,marginBottom:22,border:"1px solid "+C.border}}>
+          {[[{label:"TECNICOS",val:data.tecnicos.length,color:C.red,sub:"registrados"}],[{label:"COMISIONES TOTAL",val:fCLP(data.tecnicos.reduce((s,tc)=>s+calcTc(tc),0)),color:C.green,sub:"monto total"}],[{label:"SALDO POR PAGAR",val:fCLP(data.tecnicos.reduce((s,tc)=>s+(tc.saldoPendiente||0),0)),color:C.yellow,sub:"pendiente"}]].flat().map((k,i)=><div key={i} style={{background:C.card,padding:"18px 20px",borderLeft:i===0?"3px solid "+C.red:"none"}}>
+            <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:5}}>{k.label}</div>
+            <div style={{fontSize:22,fontWeight:700,color:k.color,lineHeight:1}}>{k.val}</div>
+            <div style={{fontSize:10,color:C.g2,marginTop:5}}>{k.sub}</div>
+          </div>)}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:3,height:18,background:C.red}}/><span style={{fontWeight:700,fontSize:12,letterSpacing:2}}>REGISTRO DE TECNICOS</span></div>
+          <Btn red onClick={()=>setMTecnico({})}><Ico.plus/> NUEVO TECNICO</Btn>
+        </div>
+        {data.tecnicos.length===0?<Empty msg="No hay tecnicos registrados"/>
+          :<div style={{display:"flex",flexDirection:"column",gap:2}}>
+            {data.tecnicos.map(tc=><TTecnico key={tc.id} tc={tc} trabajos={data.trabajos} onEdit={()=>setMTecnico(tc)} onDelete={()=>dTecnico(tc.id)}/>)}
+          </div>
+        }
+      </div>}
+
+      {/* PRESUPUESTOS */}
+      {tab==="presupuestos"&&<div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:2,marginBottom:22,border:"1px solid "+C.border}}>
+          {[[{label:"TOTAL",val:data.presupuestos.length,color:C.purple,sub:"presupuestos"}],[{label:"APROBADOS",val:data.presupuestos.filter(p=>p.estado==="aprobado").length,color:C.green,sub:"aceptados"}],[{label:"ENVIADOS",val:data.presupuestos.filter(p=>p.estado==="enviado").length,color:C.blue,sub:"esperando"}],[{label:"MONTO TOTAL",val:fCLP(data.presupuestos.reduce((s,p)=>s+Number(p.subtotal||0),0)),color:C.yellow,sub:"cotizado"}]].flat().map((k,i)=><div key={i} style={{background:C.card,padding:"18px 20px",borderLeft:i===0?"3px solid "+C.purple:"none"}}>
+            <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:5}}>{k.label}</div>
+            <div style={{fontSize:20,fontWeight:700,color:k.color,lineHeight:1}}>{k.val}</div>
+            <div style={{fontSize:10,color:C.g2,marginTop:5}}>{k.sub}</div>
+          </div>)}
+        </div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:3,height:18,background:C.red}}/><span style={{fontWeight:700,fontSize:12,letterSpacing:2}}>PRESUPUESTOS</span></div>
+          <Btn red onClick={()=>setMPres({})}><Ico.plus/> NUEVO PRESUPUESTO</Btn>
+        </div>
+        {data.presupuestos.length===0?<Empty msg="No hay presupuestos"/>
+          :<div style={{display:"flex",flexDirection:"column",gap:2}}>
+            {data.presupuestos.map(p=>{
+              const[ecol,elbl]=PS[p.estado]||[C.g2,"-"];
+              return <div key={p.id} style={{background:C.card,borderLeft:"3px solid "+ecol,display:"flex",alignItems:"stretch",border:"1px solid "+C.border}}>
+                <div style={{width:80,padding:"12px 14px",borderRight:"1px solid "+C.border,flexShrink:0}}>
+                  <div style={{fontSize:12,fontWeight:700}}>{p.nro||"-"}</div>
+                  <div style={{fontSize:9,color:C.g2,marginTop:1}}>{fDate(p.fecha)}</div>
+                </div>
+                <div style={{flex:1,padding:"12px 14px",borderRight:"1px solid "+C.border}}>
+                  <div style={{fontSize:12,fontWeight:600}}>{p.clienteNombre||"Sin nombre"}</div>
+                  <div style={{fontSize:10,color:C.g2,marginTop:1}}>{p.clienteTel||""}{p.clienteRut?" - "+p.clienteRut:""}</div>
+                </div>
+                <div style={{flex:1,padding:"12px 14px",borderRight:"1px solid "+C.border}}>
+                  <div style={{fontSize:12,fontWeight:600}}>{[p.patente,p.marca,p.modelo].filter(Boolean).join(" ")||"-"}</div>
+                  {p.codigoColor&&<div style={{fontSize:10,color:C.g2,marginTop:1}}>Color: {p.codigoColor}</div>}
+                </div>
+                <div style={{width:120,padding:"12px 12px",borderRight:"1px solid "+C.border,flexShrink:0,textAlign:"right"}}>
+                  <div style={{fontSize:8,color:C.g2,letterSpacing:1}}>TOTAL</div>
+                  <div style={{fontSize:14,fontWeight:700,color:C.yellow,marginTop:1}}>{fCLP(p.subtotal)}</div>
+                </div>
+                <div style={{width:120,padding:"12px 12px",flexShrink:0,display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
+                  <span style={{fontSize:8,fontWeight:700,letterSpacing:1.5,color:ecol,border:"1px solid "+ecol,padding:"2px 7px"}}>{elbl}</span>
+                  <div style={{display:"flex",gap:4}}>
+                    <IBtn color={C.blue} onClick={()=>setVPres(p)}><Ico.eye/></IBtn>
+                    <IBtn color={C.g1} onClick={()=>setMPres(p)}><Ico.edit/></IBtn>
+                    <IBtn color={C.red} onClick={()=>dPres(p.id)}><Ico.trash/></IBtn>
+                  </div>
+                </div>
+              </div>;
+            })}
+          </div>
+        }
+      </div>}
+
+      {/* RESUMEN */}
+      {tab==="resumen"&&(()=>{
+        const totT=gT.reduce((a,g)=>a+Number(g.monto||0),0);
+        const totP=gP.reduce((a,g)=>a+Number(g.monto||0),0);
+        const tFac=data.trabajos.reduce((a,t)=>a+Number(t.totalCobrar||0),0);
+        const aFac=data.trabajos.reduce((a,t)=>a+Number(t.abono||0),0);
+        const pFac=data.trabajos.reduce((a,t)=>a+Number(t.pendiente||0),0);
+        const catT={};gT.forEach(g=>{catT[g.categoria]=(catT[g.categoria]||0)+Number(g.monto||0);});
+        const catP={};gP.forEach(g=>{catP[g.categoria]=(catP[g.categoria]||0)+Number(g.monto||0);});
+        const totCom=data.tecnicos.reduce((s,tc)=>s+calcTc(tc),0);
+        const saldoCom=data.tecnicos.reduce((s,tc)=>s+(tc.saldoPendiente||0),0);
+        const tPres=data.presupuestos.reduce((s,p)=>s+Number(p.subtotal||0),0);
+        return <div style={{display:"flex",flexDirection:"column",gap:18}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:3,height:18,background:C.red}}/><span style={{fontWeight:700,fontSize:12,letterSpacing:2}}>RESUMEN FINANCIERO</span></div>
+            <input type="month" value={mes} onChange={e=>setMes(e.target.value)} style={{background:C.card,border:"1px solid "+C.border,padding:"7px 10px",color:C.white,fontSize:11,fontFamily:"Arial,sans-serif",outline:"none"}}/>
+          </div>
+          <div style={{background:C.card,borderLeft:"3px solid "+C.red,padding:"18px 22px"}}>
+            <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:14}}>FACTURACION GLOBAL</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:18}}>
+              {[["TOTAL COTIZADO",tFac,C.g1],["ABONADO",aFac,C.green],["PENDIENTE",pFac,C.yellow]].map(([l,v,c])=><div key={l}>
+                <div style={{fontSize:8,color:C.g2,letterSpacing:2}}>{l}</div>
+                <div style={{fontSize:24,fontWeight:700,color:c,marginTop:3}}>{fCLP(v)}</div>
+              </div>)}
+            </div>
+          </div>
+          <div style={{background:C.card,borderLeft:"3px solid "+C.purple,padding:"18px 22px"}}>
+            <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:14}}>PRESUPUESTOS</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:18}}>
+              <div><div style={{fontSize:8,color:C.g2,letterSpacing:2}}>TOTAL COTIZADO</div><div style={{fontSize:24,fontWeight:700,color:C.purple,marginTop:3}}>{fCLP(tPres)}</div></div>
+              <div><div style={{fontSize:8,color:C.g2,letterSpacing:2}}>APROBADOS</div><div style={{fontSize:24,fontWeight:700,color:C.green,marginTop:3}}>{fCLP(data.presupuestos.filter(p=>p.estado==="aprobado").reduce((s,p)=>s+Number(p.subtotal||0),0))}</div></div>
+              <div><div style={{fontSize:8,color:C.g2,letterSpacing:2}}>CANTIDAD</div><div style={{fontSize:24,fontWeight:700,color:C.g1,marginTop:3}}>{data.presupuestos.length}</div></div>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+            <CatP title="GASTOS DE TRABAJO" cats={catT} total={totT} color={C.red}/>
+            <CatP title="GASTOS PERSONALES" cats={catP} total={totP} color={C.blue}/>
+          </div>
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}><div style={{width:3,height:18,background:C.red}}/><span style={{fontWeight:700,fontSize:12,letterSpacing:2}}>COMISIONES TECNICOS</span></div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:2,marginBottom:12,border:"1px solid "+C.border}}>
+              {[[{label:"TECNICOS",val:data.tecnicos.length,color:C.red}],[{label:"TRABAJOS",val:data.tecnicos.reduce((s,tc)=>s+(tc.asignaciones||[]).length,0),color:C.g1}],[{label:"COMISIONES",val:fCLP(totCom),color:C.green}],[{label:"SALDO",val:fCLP(saldoCom),color:C.yellow}]].flat().map((k,i)=><div key={i} style={{background:C.card,padding:"14px 16px"}}>
+                <div style={{fontSize:8,color:C.g2,letterSpacing:2,marginBottom:4}}>{k.label}</div>
+                <div style={{fontSize:18,fontWeight:700,color:k.color}}>{k.val}</div>
+              </div>)}
+            </div>
+            {data.tecnicos.length===0
+              ?<div style={{background:C.card,border:"1px solid "+C.border,padding:20,textAlign:"center",color:C.g2,fontSize:11}}>Sin tecnicos</div>
+              :<div style={{border:"1px solid "+C.border}}>
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr",background:C.surface,padding:"7px 16px",borderBottom:"1px solid "+C.border}}>
+                  {["TECNICO","TRABAJOS","% PROM.","COMISION","SALDO"].map(h=><div key={h} style={{fontSize:8,color:C.g2,letterSpacing:1.5,fontWeight:700}}>{h}</div>)}
+                </div>
+                {data.tecnicos.map(tc=>{
+                  const tot=calcTc(tc);
+                  const asis=tc.asignaciones||[];
+                  const prom=asis.length>0?(asis.reduce((s,a)=>s+Number(a.porcentaje||0),0)/asis.length).toFixed(1):"-";
+                  return <div key={tc.id} className="rhov" style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 1fr",padding:"11px 16px",borderBottom:"1px solid "+C.border,alignItems:"center"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <div style={{width:28,height:28,background:C.red,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:12,fontWeight:700,color:C.white}}>{(tc.nombre||"?")[0].toUpperCase()}</div>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:700}}>{tc.nombre}</div>
+                        <div style={{fontSize:9,color:C.g2}}>{tc.especialidad||"-"}</div>
+                      </div>
+                    </div>
+                    <div style={{fontSize:16,fontWeight:700,color:C.g1}}>{asis.length}</div>
+                    <div><span style={{background:C.red+"22",color:C.red,border:"1px solid "+C.red+"44",padding:"2px 7px",fontSize:10,fontWeight:700}}>{prom}{prom!=="-"?"%":""}</span></div>
+                    <div style={{fontSize:14,fontWeight:700,color:C.green}}>{fCLP(tot)}</div>
+                    <div style={{fontSize:14,fontWeight:700,color:C.yellow}}>{fCLP(tc.saldoPendiente||0)}</div>
+                  </div>;
+                })}
+                <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:18,padding:"10px 16px",background:C.card,borderTop:"2px solid "+C.border}}>
+                  <span style={{fontSize:8,color:C.g2,letterSpacing:2}}>TOTAL COMISIONES</span>
+                  <span style={{fontSize:18,fontWeight:700,color:C.green}}>{fCLP(totCom)}</span>
+                  <span style={{fontSize:8,color:C.g2,letterSpacing:2}}>SALDO</span>
+                  <span style={{fontSize:18,fontWeight:700,color:C.yellow}}>{fCLP(saldoCom)}</span>
+                </div>
+              </div>
+            }
+          </div>
+        </div>;
+      })()}
+
+    </main>
+
+    {mTrabajo!==null&&<MTrabajo t={mTrabajo} onSave={sTrabajo} onClose={()=>setMTrabajo(null)}/>}
+    {mGasto!==null&&<MGasto g={mGasto} onSave={sGasto} onClose={()=>setMGasto(null)}/>}
+    {mTecnico!==null&&<MTecnico tc={mTecnico} trabajos={data.trabajos} onSave={sTecnico} onClose={()=>setMTecnico(null)}/>}
+    {mPres!==null&&<MPresupuesto p={mPres} onSave={sPres} onClose={()=>setMPres(null)}/>}
+    {vTrabajo!==null&&<DTrabajo t={vTrabajo} onClose={()=>setVTrabajo(null)} onEdit={()=>{setMTrabajo(vTrabajo);setVTrabajo(null);}} onDelete={()=>dTrabajo(vTrabajo.id)}/>}
+    {vPres!==null&&<VPres p={vPres} onClose={()=>setVPres(null)} onEdit={()=>{setMPres(vPres);setVPres(null);}}/>}
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{});});}</script>
+</body>
+</html>
