@@ -1,8 +1,9 @@
 {
-  "name": "Taller — Sistema de Gestión",
-  "short_name": "Taller",
-  "description": "Gestión de trabajos, gastos y técnicos para taller automotriz",
+  "name": "Vergara y CIA",
+  "short_name": "Vergara CIA",
+  "description": "Sistema de Gestion Taller Automotriz",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#CC0000",
